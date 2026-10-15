@@ -2,6 +2,8 @@
 
 Bài tập lớn Lập trình nâng cao 2025–2026: hệ thống đấu giá trực tuyến (Client–Server, JavaFX, MVC).
 
+> **Thành viên mới:** đọc [Hướng dẫn cài đặt & clone repo](docs/SETUP.md) trước.
+
 ## Yêu cầu
 
 - JDK 17 trở lên
