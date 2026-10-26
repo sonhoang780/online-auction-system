@@ -35,6 +35,9 @@ public class Bidder extends User {
 
     public synchronized void withdraw(BigDecimal amount) {
         requirePositive(amount);
+        // BigDecimal không được dùng với equals vì:
+        //Ví dụ: new BigDecimal("2.0").equals(new BigDecimal("2.00"))
+        //→ trả về false (vì khác số chữ số 0 đằng sau).
         if (balance.compareTo(amount) < 0) {
             throw new IllegalStateException("Số dư không đủ: có " + balance + ", cần " + amount);
         }
