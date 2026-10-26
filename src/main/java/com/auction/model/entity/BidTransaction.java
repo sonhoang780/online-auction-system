@@ -7,6 +7,7 @@ import java.util.UUID;
 
 /**
  * Một lượt đặt giá. Bất biến: tạo xong không sửa được, nên chia sẻ giữa các thread an toàn.
+ * Là dữ liệu con (nằm bên trong từng phiên Auction để lưu lại lịch sử ai đã trả bao nhiêu tiền).
  */
 public record BidTransaction(UUID auctionId, UUID bidderId, BigDecimal amount, LocalDateTime timestamp) {
     public BidTransaction {
