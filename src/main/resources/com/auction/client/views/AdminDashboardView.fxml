@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane prefHeight="650.0" prefWidth="950.0" 
+            stylesheets="@../../../css/styles.css" 
+            xmlns="http://javafx.com/javafx/21" 
+            xmlns:fx="http://javafx.com/fxml/1" 
+            fx:controller="com.auction.client.controller.AdminDashboardController">
+    <top>
+        <HBox alignment="CENTER_LEFT" spacing="15.0" style="-fx-background-color: #ffffff; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;">
+            <padding>
+                <Insets bottom="15.0" left="20.0" right="20.0" top="15.0" />
+            </padding>
+            <Button onAction="#handleBack" styleClass="btn-secondary" text="⬅ Quay lại" />
+            <Label text="🛡️ BẢNG ĐIỀU KHIỂN QUẢN TRỊ VIÊN (ADMIN)" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #1e3a8a;" />
+        </HBox>
+    </top>
+
+    <center>
+        <VBox spacing="20.0">
+            <padding>
+                <Insets bottom="20.0" left="25.0" right="25.0" top="20.0" />
+            </padding>
+
+            <!-- Thống kê hệ thống -->
+            <HBox spacing="20.0">
+                <VBox prefWidth="300.0" styleClass="card-panel">
+                    <Label text="PHIÊN ĐANG HOẠT ĐỘNG" style="-fx-text-fill: #64748b; -fx-font-size: 12px; -fx-font-weight: bold;" />
+                    <Label fx:id="lblActiveSessions" style="-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #2563eb;" text="0 phiên" />
+                </VBox>
+                <VBox prefWidth="300.0" styleClass="card-panel">
+                    <Label text="NGƯỜI DÙNG ONLINE" style="-fx-text-fill: #64748b; -fx-font-size: 12px; -fx-font-weight: bold;" />
+                    <Label fx:id="lblTotalUsers" style="-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #059669;" text="0 người" />
+                </VBox>
+            </HBox>
+
+            <!-- Bảng danh sách chờ duyệt -->
+            <VBox spacing="12.0" styleClass="card-panel" VBox.vgrow="ALWAYS">
+                <Label text="Danh sách phiên đấu giá chờ kiểm duyệt" style="-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #1e293b;" />
+                <TableView fx:id="tblPendingAuctions" VBox.vgrow="ALWAYS">
+                    <columns>
+                        <TableColumn fx:id="colId" prefWidth="90.0" text="Mã" />
+                        <TableColumn fx:id="colTitle" prefWidth="280.0" text="Tên sản phẩm" />
+                        <TableColumn fx:id="colStartPrice" prefWidth="150.0" text="Giá khởi điểm" />
+                        <TableColumn fx:id="colStatus" prefWidth="120.0" text="Trạng thái" />
+                    </columns>
+                </TableView>
+
+                <HBox spacing="15.0" alignment="CENTER_RIGHT">
+                    <Button onAction="#handleReject" styleClass="btn-danger" text="❌ Từ chối phiên" />
+                    <Button onAction="#handleApprove" styleClass="btn-success" text="✔ Phê duyệt phiên" />
+                </HBox>
+            </VBox>
+        </VBox>
+    </center>
+</BorderPane>
