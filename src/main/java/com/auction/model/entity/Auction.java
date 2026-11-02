@@ -98,6 +98,7 @@ public class Auction extends Entity {
         } finally {
             lock.unlock();
         }
+        // Ngoài finally: chỉ báo khi đổi trạng thái thành công, try ném lỗi thì không chạy tới đây.
         notifyStatusChanged(old, AuctionStatus.RUNNING);
     }
 
@@ -148,6 +149,7 @@ public class Auction extends Entity {
         } finally {
             lock.unlock();
         }
+        // Ngoài finally: chỉ báo khi đổi trạng thái thành công, try ném lỗi thì không chạy tới đây.
         notifyStatusChanged(old, next);
     }
 
@@ -159,6 +161,7 @@ public class Auction extends Entity {
         } finally {
             lock.unlock();
         }
+        // Ngoài finally: chỉ báo khi đổi trạng thái thành công, try ném lỗi thì không chạy tới đây.
         notifyStatusChanged(old, AuctionStatus.PAID);
     }
 
@@ -170,6 +173,7 @@ public class Auction extends Entity {
         } finally {
             lock.unlock();
         }
+        // Ngoài finally: chỉ báo khi đổi trạng thái thành công, try ném lỗi thì không chạy tới đây.
         notifyStatusChanged(old, AuctionStatus.CANCELED);
     }
 
