@@ -12,7 +12,15 @@ import java.util.UUID;
 
 /**
  * Cửa vào nghiệp vụ đấu giá cho server (B): nhận id, tìm phiên trong AuctionManager rồi gọi xuống Auction.
- * Không tự lock: lock và kiểm tra giá nằm trong Auction.placeBid.
+ *
+ * Không tự lock: lock và kiểm tra giá nằm trong Auction.placeBid, vì:
+ * - Lock phải nằm cạnh dữ liệu nó bảo vệ. currentPrice, status, bids là của Auction; nếu lock đặt ở đây
+ *   thì nơi nào gọi thẳng auction.placeBid() (AuctionScheduler, test, service khác) sẽ lọt qua lock.
+ * - Mỗi phiên một lock riêng: đặt giá ở hai phiên khác nhau chạy song song được. Một lock chung
+ *   ở service sẽ bắt mọi phiên xếp hàng chung.
+ * - Kiểm tra "giá >= giá hiện tại + bước giá" và ghi giá mới phải trong cùng một lock; finish() của
+ *   Scheduler cũng dùng lock đó, nên một bid không thể chen vào đúng lúc phiên đang đóng.
+ * - Thêm một lock nữa ở đây là thừa, và lock lồng nhau dễ gây deadlock.
  */
 public class AuctionService {
     private final AuctionManager manager = AuctionManager.getInstance();
