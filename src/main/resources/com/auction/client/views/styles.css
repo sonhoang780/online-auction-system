@@ -1,0 +1,108 @@
+/* Global Font & Background */
+.root {
+    -fx-font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+    -fx-background-color: #f8fafc;
+}
+
+/* Card Panel */
+.card-panel {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 12px;
+    -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.08), 10, 0, 0, 4);
+    -fx-padding: 24px;
+}
+
+/* Primary Button (Blue) */
+.btn-primary {
+    -fx-background-color: #2563eb;
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 8px;
+    -fx-cursor: hand;
+    -fx-padding: 8px 16px;
+}
+.btn-primary:hover {
+    -fx-background-color: #1d4ed8;
+}
+
+/* Success Button (Green - Realtime Bid) */
+.btn-success {
+    -fx-background-color: #10b981;
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 8px;
+    -fx-cursor: hand;
+    -fx-padding: 8px 16px;
+}
+.btn-success:hover {
+    -fx-background-color: #059669;
+}
+
+/* Danger Button (Red) */
+.btn-danger {
+    -fx-background-color: #ef4444;
+    -fx-text-fill: white;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 8px;
+    -fx-cursor: hand;
+    -fx-padding: 8px 16px;
+}
+.btn-danger:hover {
+    -fx-background-color: #dc2626;
+}
+
+/* Secondary Button */
+.btn-secondary {
+    -fx-background-color: #e2e8f0;
+    -fx-text-fill: #334155;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 8px;
+    -fx-cursor: hand;
+    -fx-padding: 8px 16px;
+}
+.btn-secondary:hover {
+    -fx-background-color: #cbd5e1;
+}
+
+/* Text Fields */
+.text-field, .password-field, .text-area {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #cbd5e1;
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
+    -fx-padding: 8px;
+    -fx-font-size: 13px;
+}
+.text-field:focused, .password-field:focused, .text-area:focused {
+    -fx-border-color: #2563eb;
+    -fx-effect: dropshadow(three-pass-box, rgba(37, 99, 235, 0.2), 6, 0, 0, 0);
+}
+
+/* Table View */
+.table-view {
+    -fx-background-color: transparent;
+    -fx-border-color: #e2e8f0;
+    -fx-border-radius: 8px;
+}
+.table-view .column-header {
+    -fx-background-color: #f1f5f9;
+    -fx-font-weight: bold;
+    -fx-padding: 10px;
+}
+
+/* Highlighting numbers and prices */
+.price-tag {
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #dc2626;
+}
+
+.countdown-tag {
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #ea580c;
+}
