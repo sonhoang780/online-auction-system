@@ -98,8 +98,25 @@ public class Auction extends Entity {
         } finally {
             lock.unlock();
         }
-        // Ngoài finally: chỉ báo khi đổi trạng thái thành công, try ném lỗi thì không chạy tới đây.
         notifyStatusChanged(old, AuctionStatus.RUNNING);
+    }
+    public boolean startIfDue() {
+        AuctionStatus old;
+
+        lock.lock();
+        try {
+            if (status != AuctionStatus.OPEN
+                    || LocalDateTime.now().isBefore(startTime)) {
+                return false;
+            }
+
+            old = changeStatus(AuctionStatus.RUNNING);
+        } finally {
+            lock.unlock();
+        }
+
+        notifyStatusChanged(old, AuctionStatus.RUNNING);
+        return true;
     }
 
     public BidTransaction placeBid(Bidder bidder, BigDecimal amount) {
@@ -111,25 +128,52 @@ public class Auction extends Entity {
     private BidTransaction recordBid(Bidder bidder, BigDecimal amount) {
         Objects.requireNonNull(bidder, "bidder must not be null");
         Objects.requireNonNull(amount, "amount must not be null");
+
         lock.lock();
         try {
-            if (status != AuctionStatus.RUNNING || LocalDateTime.now().isAfter(endTime)) {
-                throw new AuctionClosedException("Phiên " + getId() + " không nhận giá (" + status + ")");
-            }
-            if (!bidder.canBid()) {
-                throw new InvalidBidException(bidder + " không có quyền đặt giá");
-            }
-            BigDecimal minAccepted = currentPrice.add(minIncrement);
-            if (amount.compareTo(minAccepted) < 0) {
-                throw new InvalidBidException("Giá phải >= " + minAccepted + ", nhận " + amount);
+            LocalDateTime now = LocalDateTime.now();
+
+            // Kiểm tra trạng thái và thời gian đấu giá
+            if (status != AuctionStatus.RUNNING
+                    || now.isBefore(startTime)
+                    || !now.isBefore(endTime)) {
+                throw new AuctionClosedException(
+                        "Phiên " + getId() + " không nhận giá (" + status + ")"
+                );
             }
 
-            BidTransaction bid = new BidTransaction(getId(), bidder.getId(), amount, LocalDateTime.now());
+            // Kiểm tra quyền đặt giá
+            if (!bidder.canBid()) {
+                throw new InvalidBidException(
+                        bidder + " không có quyền đặt giá"
+                );
+            }
+
+            // Kiểm tra mức giá tối thiểu
+            BigDecimal minAccepted = currentPrice.add(minIncrement);
+
+            if (amount.compareTo(minAccepted) < 0) {
+                throw new InvalidBidException(
+                        "Giá phải >= " + minAccepted + ", nhận " + amount
+                );
+            }
+
+            // Ghi nhận lượt đặt giá
+            BidTransaction bid = new BidTransaction(
+                    getId(),
+                    bidder.getId(),
+                    amount,
+                    now
+            );
+
             bids.add(bid);
             currentPrice = amount;
             leadingBidderId = bidder.getId();
+
             markUpdated();
+
             return bid;
+
         } finally {
             lock.unlock();
         }
@@ -151,6 +195,29 @@ public class Auction extends Entity {
         }
         // Ngoài finally: chỉ báo khi đổi trạng thái thành công, try ném lỗi thì không chạy tới đây.
         notifyStatusChanged(old, next);
+    }
+    public boolean finishIfExpired() {
+        AuctionStatus old;
+        AuctionStatus next;
+
+        lock.lock();
+        try {
+            if (status != AuctionStatus.RUNNING
+                    || LocalDateTime.now().isBefore(endTime)) {
+                return false;
+            }
+
+            next = bids.isEmpty()
+                    ? AuctionStatus.CANCELED
+                    : AuctionStatus.FINISHED;
+
+            old = changeStatus(next);
+        } finally {
+            lock.unlock();
+        }
+
+        notifyStatusChanged(old, next);
+        return true;
     }
 
     public void markPaid() {
