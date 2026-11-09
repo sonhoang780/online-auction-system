@@ -8,5 +8,6 @@ module com.auction {
     opens com.auction.model.entity to com.google.gson;
 
     exports com.auction;
+    exports com.auction.server;
     exports com.auction.server.protocol;
 }
