@@ -14,6 +14,9 @@ import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.ReentrantLock;
 import java.time.Duration;
+import java.util.Comparator;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Phiên đấu giá cho một Item.
@@ -37,6 +40,7 @@ public class Auction extends Entity {
     private BigDecimal currentPrice;
     private UUID leadingBidderId;              // null khi chưa có bid
     private final List<BidTransaction> bids = new ArrayList<>();
+    private final List<AutoBid> autoBids = new ArrayList<>();
 
     private final ReentrantLock lock = new ReentrantLock();
     // Đọc nhiều (mỗi bid duyệt 1 lần), ghi ít (client vào/ra phiên) nên không cần lock riêng.
@@ -117,77 +121,146 @@ public class Auction extends Entity {
         return true;
     }
     public BidTransaction placeBid(Bidder bidder, BigDecimal amount) {
-        BidTransaction bid = recordBid(bidder, amount);
-        notifyBidPlaced(bid);
-        return bid;
-    }
+        List<BidTransaction> placedBids = new ArrayList<>();
 
-    private BidTransaction recordBid(Bidder bidder, BigDecimal amount) {
-        Objects.requireNonNull(bidder, "bidder must not be null");
-        Objects.requireNonNull(amount, "amount must not be null");
+        BidTransaction manualBid;
 
         lock.lock();
         try {
-            LocalDateTime now = LocalDateTime.now();
+            // Ghi nhận lượt đặt giá thủ công
+            manualBid = recordBidLocked(bidder, amount);
+            placedBids.add(manualBid);
 
-            // Kiểm tra trạng thái và thời gian đấu giá
-            if (status != AuctionStatus.RUNNING
-                    || now.isBefore(startTime)
-                    || !now.isBefore(endTime)) {
-                throw new AuctionClosedException(
-                        "Phiên " + getId() + " không nhận giá (" + status + ")"
-                );
+            // Xử lý Auto-Bidding
+            BidTransaction autoBid = processAutoBidsLocked();
+
+            if (autoBid != null) {
+                placedBids.add(autoBid);
             }
-
-            // Kiểm tra quyền đặt giá
-            if (!bidder.canBid()) {
-                throw new InvalidBidException(
-                        bidder + " không có quyền đặt giá"
-                );
-            }
-
-            // Kiểm tra mức giá tối thiểu
-            BigDecimal minAccepted = currentPrice.add(minIncrement);
-
-            if (amount.compareTo(minAccepted) < 0) {
-                throw new InvalidBidException(
-                        "Giá phải >= " + minAccepted + ", nhận " + amount
-                );
-            }
-
-            // Ghi nhận lượt đặt giá
-            BidTransaction bid = new BidTransaction(
-                    getId(),
-                    bidder.getId(),
-                    amount,
-                    now
-            );
-            
-            bids.add(bid);
-            currentPrice = amount;
-            leadingBidderId = bidder.getId();
-
-            // Anti-sniping: gia hạn nếu bid nằm trong 30 giây cuối
-            Duration remainingTime = Duration.between(now, endTime);
-
-            if (remainingTime.compareTo(ANTI_SNIPING_WINDOW) <= 0) {
-                endTime = endTime.plus(ANTI_SNIPING_EXTENSION);
-
-                LOG.log(
-                        System.Logger.Level.INFO,
-                        "Phiên {0} được gia hạn đến {1}",
-                        getId(),
-                        endTime
-                );
-            }
-
-            markUpdated();
-
-            return bid;
 
         } finally {
             lock.unlock();
         }
+
+        // Thông báo Observer sau khi giải phóng lock
+        for (BidTransaction bid : placedBids) {
+            notifyBidPlaced(bid);
+        }
+
+        return manualBid;
+    }
+
+    private BidTransaction recordBidLocked(
+            Bidder bidder,
+            BigDecimal amount
+    ) {
+        Objects.requireNonNull(bidder, "bidder must not be null");
+        Objects.requireNonNull(amount, "amount must not be null");
+
+        LocalDateTime now = LocalDateTime.now();
+
+        if (status != AuctionStatus.RUNNING
+                || now.isBefore(startTime)
+                || !now.isBefore(endTime)) {
+            throw new AuctionClosedException(
+                    "Phiên đấu giá không hoạt động"
+            );
+        }
+
+        if (!bidder.canBid()) {
+            throw new InvalidBidException(
+                    "Bidder không có quyền đặt giá"
+            );
+        }
+
+        BigDecimal minAccepted = currentPrice.add(minIncrement);
+
+        if (amount.compareTo(minAccepted) < 0) {
+            throw new InvalidBidException(
+                    "Giá đặt phải lớn hơn hoặc bằng " + minAccepted
+            );
+        }
+
+        BidTransaction bid = new BidTransaction(
+                getId(),
+                bidder.getId(),
+                amount,
+                now
+        );
+
+        bids.add(bid);
+        currentPrice = amount;
+        leadingBidderId = bidder.getId();
+
+        // Anti-sniping
+        Duration remainingTime = Duration.between(now, endTime);
+
+        if (remainingTime.compareTo(ANTI_SNIPING_WINDOW) <= 0) {
+            endTime = endTime.plus(ANTI_SNIPING_EXTENSION);
+
+            LOG.log(
+                    System.Logger.Level.INFO,
+                    "Phiên {0} được gia hạn đến {1}",
+                    getId(),
+                    endTime
+            );
+        }
+
+        markUpdated();
+
+        return bid;
+    }
+    private BidTransaction processAutoBidsLocked() {
+        if (autoBids.isEmpty()) {
+            return null;
+        }
+
+        List<AutoBid> rankedAutoBids = new ArrayList<>(autoBids);
+
+        rankedAutoBids.sort(
+                Comparator.comparing(AutoBid::maxAmount)
+                        .reversed()
+                        .thenComparing(AutoBid::registeredAt)
+        );
+
+        AutoBid winner = rankedAutoBids.get(0);
+
+        boolean winnerIsLeading = winner.bidder().getId()
+                .equals(leadingBidderId);
+
+        BigDecimal minAccepted = currentPrice.add(minIncrement);
+
+        // Tìm mức tối đa cao nhất của các Auto-Bidder còn lại
+        BigDecimal competingMax = currentPrice;
+
+        for (int i = 1; i < rankedAutoBids.size(); i++) {
+            BigDecimal maxAmount = rankedAutoBids.get(i).maxAmount();
+
+            if (maxAmount.compareTo(competingMax) > 0) {
+                competingMax = maxAmount;
+            }
+        }
+
+        // Nếu người có mức tối đa cao nhất đang dẫn đầu,
+        // chỉ tăng giá khi đối thủ đủ khả năng cạnh tranh.
+        if (winnerIsLeading
+                && competingMax.compareTo(minAccepted) < 0) {
+            return null;
+        }
+
+        // Đặt giá cao hơn đối thủ mạnh nhất một bước giá
+        BigDecimal targetAmount = competingMax.add(minIncrement);
+
+        // Không vượt quá mức tối đa đã đăng ký
+        if (targetAmount.compareTo(winner.maxAmount()) > 0) {
+            targetAmount = winner.maxAmount();
+        }
+
+        if (targetAmount.compareTo(minAccepted) < 0) {
+            return null;
+        }
+
+        return recordBidLocked(winner.bidder(), targetAmount);
     }
 
     /**
@@ -335,5 +408,68 @@ public class Auction extends Entity {
     public String toString() {
         return "Auction{id=" + getId() + ", itemId=" + itemId + ", status=" + getStatus()
                 + ", currentPrice=" + getCurrentPrice() + '}';
+    }
+    public void registerAutoBid(Bidder bidder, BigDecimal maxAmount) {
+        Objects.requireNonNull(bidder, "bidder must not be null");
+        Objects.requireNonNull(maxAmount, "maxAmount must not be null");
+
+        BidTransaction autoBid = null;
+
+        lock.lock();
+        try {
+            LocalDateTime now = LocalDateTime.now();
+
+            if (status != AuctionStatus.RUNNING
+                    || now.isBefore(startTime)
+                    || !now.isBefore(endTime)) {
+                throw new AuctionClosedException(
+                        "Phiên đấu giá không hoạt động"
+                );
+            }
+
+            if (!bidder.canBid()) {
+                throw new InvalidBidException(
+                        "Bidder không có quyền Auto-Bid"
+                );
+            }
+
+            BigDecimal minAccepted = currentPrice.add(minIncrement);
+
+            if (maxAmount.compareTo(minAccepted) < 0) {
+                throw new InvalidBidException(
+                        "Giá tối đa phải >= " + minAccepted
+                );
+            }
+
+            boolean alreadyRegistered = autoBids.stream()
+                    .anyMatch(existing ->
+                            existing.bidder().getId().equals(bidder.getId())
+                    );
+
+            if (alreadyRegistered) {
+                throw new InvalidBidException(
+                        "Bidder đã đăng ký Auto-Bid"
+                );
+            }
+
+            autoBids.add(new AutoBid(
+                    bidder,
+                    maxAmount,
+                    LocalDateTime.now()
+            ));
+
+            // Chỉ kích hoạt ngay nếu đã có người dẫn đầu
+            if (leadingBidderId != null) {
+                autoBid = processAutoBidsLocked();
+            }
+
+        } finally {
+            lock.unlock();
+        }
+
+        // Không gọi Observer khi vẫn đang giữ lock
+        if (autoBid != null) {
+            notifyBidPlaced(autoBid);
+        }
     }
 }

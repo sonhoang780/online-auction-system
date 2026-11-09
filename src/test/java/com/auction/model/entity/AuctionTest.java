@@ -51,6 +51,17 @@ class AuctionTest {
                 new BigDecimal("100000")
         );
     }
+    private Bidder createBidder(String username) {
+        return new Bidder(
+                username,
+                "hashed-password",
+                username + "@example.com"
+        );
+    }
+
+    private void startAuction() {
+        auction.startIfDue();
+    }
 
     @Test
     void startIfDue_shouldStartAuction_whenStartTimeHasPassed() {
@@ -647,5 +658,318 @@ class AuctionTest {
 
         // Assert
         assertEquals(originalEndTime, testAuction.getEndTime());
+    }
+    @Test
+    void placeBid_shouldTriggerAutoBid_whenRegisteredBidderIsOutbid() {
+        startAuction();
+
+        Bidder autoBidder = createBidder("alice");
+        Bidder manualBidder = createBidder("bob");
+
+        auction.registerAutoBid(
+                autoBidder,
+                new BigDecimal("12000000")
+        );
+
+        auction.placeBid(
+                manualBidder,
+                new BigDecimal("10200000")
+        );
+
+        assertEquals(
+                autoBidder.getId(),
+                auction.getLeadingBidderId()
+        );
+
+        assertEquals(
+                new BigDecimal("10300000"),
+                auction.getCurrentPrice()
+        );
+    }
+    @Test
+    void placeBid_shouldNotTriggerAutoBid_whenManualBidExceedsMaxAmount() {
+        startAuction();
+
+        Bidder autoBidder = createBidder("alice");
+        Bidder manualBidder = createBidder("bob");
+
+        auction.registerAutoBid(
+                autoBidder,
+                new BigDecimal("11000000")
+        );
+
+        auction.placeBid(
+                manualBidder,
+                new BigDecimal("11500000")
+        );
+
+        assertEquals(
+                manualBidder.getId(),
+                auction.getLeadingBidderId()
+        );
+
+        assertEquals(
+                new BigDecimal("11500000"),
+                auction.getCurrentPrice()
+        );
+    }
+    @Test
+    void placeBid_shouldSelectHighestMaxAutoBidder() {
+        startAuction();
+
+        Bidder bidderA = createBidder("alice");
+        Bidder bidderB = createBidder("bob");
+        Bidder manualBidder = createBidder("charlie");
+
+        auction.registerAutoBid(
+                bidderA,
+                new BigDecimal("12000000")
+        );
+
+        auction.registerAutoBid(
+                bidderB,
+                new BigDecimal("13000000")
+        );
+
+        auction.placeBid(
+                manualBidder,
+                new BigDecimal("10200000")
+        );
+
+        assertEquals(
+                bidderB.getId(),
+                auction.getLeadingBidderId()
+        );
+
+        assertEquals(
+                new BigDecimal("12100000"),
+                auction.getCurrentPrice()
+        );
+    }
+    @Test
+    void placeBid_shouldPrioritizeEarlierRegistration_whenMaxAmountsAreEqual() {
+        startAuction();
+
+        Bidder firstBidder = createBidder("alice");
+        Bidder secondBidder = createBidder("bob");
+        Bidder manualBidder = createBidder("charlie");
+
+        BigDecimal maxAmount = new BigDecimal("12000000");
+
+        auction.registerAutoBid(firstBidder, maxAmount);
+        auction.registerAutoBid(secondBidder, maxAmount);
+
+        auction.placeBid(
+                manualBidder,
+                new BigDecimal("10200000")
+        );
+
+        assertEquals(
+                firstBidder.getId(),
+                auction.getLeadingBidderId()
+        );
+    }
+    @Test
+    void registerAutoBid_shouldTriggerAutomaticBid_whenAuctionAlreadyHasLeader() {
+        startAuction();
+
+        Bidder manualBidder = createBidder("alice");
+        Bidder autoBidder = createBidder("bob");
+
+        auction.placeBid(
+                manualBidder,
+                new BigDecimal("10500000")
+        );
+
+        auction.registerAutoBid(
+                autoBidder,
+                new BigDecimal("12000000")
+        );
+
+        assertEquals(
+                autoBidder.getId(),
+                auction.getLeadingBidderId()
+        );
+
+        assertEquals(
+                new BigDecimal("10600000"),
+                auction.getCurrentPrice()
+        );
+    }
+    @Test
+    void registerAutoBid_shouldThrowException_whenMaxAmountIsTooLow() {
+        startAuction();
+
+        Bidder bidder = createBidder("alice");
+
+        assertThrows(
+                InvalidBidException.class,
+                () -> auction.registerAutoBid(
+                        bidder,
+                        new BigDecimal("10050000")
+                )
+        );
+
+        assertTrue(auction.getBids().isEmpty());
+    }
+    @Test
+    void registerAutoBid_shouldThrowException_whenBidderRegistersTwice() {
+        startAuction();
+
+        Bidder bidder = createBidder("alice");
+
+        auction.registerAutoBid(
+                bidder,
+                new BigDecimal("12000000")
+        );
+
+        assertThrows(
+                InvalidBidException.class,
+                () -> auction.registerAutoBid(
+                        bidder,
+                        new BigDecimal("13000000")
+                )
+        );
+    }
+    @Test
+    void registerAutoBid_shouldThrowException_whenAuctionHasNotStarted() {
+        Bidder bidder = createBidder("alice");
+
+        assertThrows(
+                AuctionClosedException.class,
+                () -> auction.registerAutoBid(
+                        bidder,
+                        new BigDecimal("12000000")
+                )
+        );
+    }
+    @Test
+    void registerAutoBid_shouldThrowException_whenBidderIsNull() {
+        assertThrows(
+                NullPointerException.class,
+                () -> auction.registerAutoBid(
+                        null,
+                        new BigDecimal("12000000")
+                )
+        );
+    }
+    @Test
+    void registerAutoBid_shouldThrowException_whenMaxAmountIsNull() {
+        startAuction();
+
+        Bidder bidder = createBidder("alice");
+
+        assertThrows(
+                NullPointerException.class,
+                () -> auction.registerAutoBid(bidder, null)
+        );
+    }
+    @Test
+    void registerAutoBid_shouldThrowException_whenBidderCannotBid() {
+        startAuction();
+
+        Bidder unauthorizedBidder = new Bidder(
+                "unauthorized",
+                "passwordHash",
+                "unauthorized@example.com"
+        ) {
+            @Override
+            public boolean canBid() {
+                return false;
+            }
+        };
+
+        assertThrows(
+                InvalidBidException.class,
+                () -> auction.registerAutoBid(
+                        unauthorizedBidder,
+                        new BigDecimal("12000000")
+                )
+        );
+    }
+    @Test
+    void placeBid_shouldBidJustAboveSecondHighestMax_whenMultipleAutoBiddersCompete() {
+        startAuction();
+
+        Bidder bidderA = createBidder("alice");
+        Bidder bidderB = createBidder("bob");
+        Bidder bidderC = createBidder("charlie");
+
+        // A đăng ký tối đa 15 triệu
+        auction.registerAutoBid(
+                bidderA,
+                new BigDecimal("15000000")
+        );
+
+        // B đăng ký tối đa 12 triệu
+        auction.registerAutoBid(
+                bidderB,
+                new BigDecimal("12000000")
+        );
+
+        // C đặt giá thủ công 11 triệu
+        auction.placeBid(
+                bidderC,
+                new BigDecimal("11000000")
+        );
+
+        // A phải tự động trả 12,1 triệu
+        assertEquals(
+                0,
+                new BigDecimal("12100000")
+                        .compareTo(auction.getCurrentPrice())
+        );
+
+        assertEquals(
+                bidderA.getId(),
+                auction.getLeadingBidderId()
+        );
+
+        assertEquals(2, auction.getBids().size());
+    }
+    @Test
+    void registerAutoBid_shouldRaiseCurrentBid_whenLeadingAutoBidderFacesNewCompetitor() {
+        startAuction();
+
+        Bidder bidderA = createBidder("alice");
+        Bidder bidderB = createBidder("bob");
+        Bidder bidderC = createBidder("charlie");
+
+        // C đặt giá thủ công và dẫn đầu
+        auction.placeBid(
+                bidderC,
+                new BigDecimal("11000000")
+        );
+
+        // A đăng ký Auto-Bid tối đa 15 triệu
+        auction.registerAutoBid(
+                bidderA,
+                new BigDecimal("15000000")
+        );
+
+        // A trở thành người dẫn đầu với giá 11,1 triệu
+        assertEquals(
+                0,
+                new BigDecimal("11100000")
+                        .compareTo(auction.getCurrentPrice())
+        );
+
+        // B đăng ký Auto-Bid tối đa 12 triệu
+        auction.registerAutoBid(
+                bidderB,
+                new BigDecimal("12000000")
+        );
+
+        // A phải nâng giá lên 12,1 triệu
+        assertEquals(
+                0,
+                new BigDecimal("12100000")
+                        .compareTo(auction.getCurrentPrice())
+        );
+
+        assertEquals(
+                bidderA.getId(),
+                auction.getLeadingBidderId()
+        );
     }
 }
