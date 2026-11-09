@@ -13,6 +13,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import com.auction.exception.AuctionClosedException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -319,8 +320,7 @@ class AuctionTest {
         assertEquals(amount, auction.getCurrentPrice());
         assertEquals(1, auction.getBids().size());
     }
-    
-@Test
+    @Test
     void placeBid_shouldHandleConcurrentBidsCorrectly() throws Exception {
         // Arrange
         auction.startIfDue();
@@ -409,5 +409,161 @@ class AuctionTest {
                 auction.getLeadingBidderId().equals(bidder1.getId())
                         || auction.getLeadingBidderId().equals(bidder2.getId())
         );
+    }       
+    @Test
+    void placeBid_shouldThrowException_whenAuctionHasNotStarted() {
+        // Arrange
+        LocalDateTime now = LocalDateTime.now();
+
+        Item item = new OtherItem(
+                "Future Laptop",
+                "Future auction test",
+                UUID.randomUUID(),
+                new BigDecimal("10000000"),
+                List.of(),
+                ItemCategory.OTHER,
+                ItemCondition.NEW,
+                "Test item"
+        );
+
+        Auction futureAuction = new Auction(
+                item,
+                now.plusMinutes(10),
+                now.plusMinutes(20),
+                new BigDecimal("100000")
+        );
+
+        Bidder bidder = new Bidder(
+                "future_bidder",
+                "passwordHash",
+                "future@example.com"
+        );
+
+        // Act & Assert
+        assertThrows(
+                AuctionClosedException.class,
+                () -> futureAuction.placeBid(
+                        bidder,
+                        new BigDecimal("10100000")
+                )
+        );
+
+        // Verify state remains unchanged
+        assertEquals(AuctionStatus.OPEN, futureAuction.getStatus());
+        assertEquals(new BigDecimal("10000000"), futureAuction.getCurrentPrice());
+        assertTrue(futureAuction.getBids().isEmpty());
+    } 
+    @Test
+    void placeBid_shouldThrowException_whenAuctionHasExpired() {
+        // Arrange
+        LocalDateTime now = LocalDateTime.now();
+
+        Item item = new OtherItem(
+                "Expired Laptop",
+                "Expired auction test",
+                UUID.randomUUID(),
+                new BigDecimal("10000000"),
+                List.of(),
+                ItemCategory.OTHER,
+                ItemCondition.NEW,
+                "Test item"
+        );
+
+        Auction expiredAuction = new Auction(
+                item,
+                now.minusMinutes(10),
+                now.minusMinutes(1),
+                new BigDecimal("100000")
+        );
+
+        expiredAuction.startIfDue();
+
+        Bidder bidder = new Bidder(
+                "expired_bidder",
+                "passwordHash",
+                "expired@example.com"
+        );
+
+        // Act & Assert
+        assertThrows(
+                AuctionClosedException.class,
+                () -> expiredAuction.placeBid(
+                        bidder,
+                        new BigDecimal("10100000")
+                )
+        );
+
+        // Verify state remains unchanged
+        assertEquals(AuctionStatus.RUNNING, expiredAuction.getStatus());
+        assertEquals(new BigDecimal("10000000"), expiredAuction.getCurrentPrice());
+        assertTrue(expiredAuction.getBids().isEmpty());
+    }  
+    @Test
+    void placeBid_shouldThrowException_whenBidderIsNull() {
+        // Arrange
+        auction.startIfDue();
+
+        // Act & Assert
+        assertThrows(
+                NullPointerException.class,
+                () -> auction.placeBid(
+                        null,
+                        new BigDecimal("10100000")
+                )
+        );
+
+        // Verify state remains unchanged
+        assertEquals(new BigDecimal("10000000"), auction.getCurrentPrice());
+        assertTrue(auction.getBids().isEmpty());
+    }
+    @Test
+    void placeBid_shouldThrowException_whenAmountIsNull() {
+        // Arrange
+        auction.startIfDue();
+
+        Bidder bidder = new Bidder(
+                "null_amount_bidder",
+                "passwordHash",
+                "nullamount@example.com"
+        );
+
+        // Act & Assert
+        assertThrows(
+                NullPointerException.class,
+                () -> auction.placeBid(bidder, null)
+        );
+
+        // Verify state remains unchanged
+        assertEquals(new BigDecimal("10000000"), auction.getCurrentPrice());
+        assertTrue(auction.getBids().isEmpty());
+    } 
+    @Test
+    void placeBid_shouldThrowException_whenBidderCannotBid() {
+        // Arrange
+        auction.startIfDue();
+
+        Bidder unauthorizedBidder = new Bidder(
+                "unauthorized",
+                "passwordHash",
+                "unauthorized@example.com"
+        ) {
+            @Override
+            public boolean canBid() {
+                return false;
+            }
+        };
+
+        // Act & Assert
+        assertThrows(
+                InvalidBidException.class,
+                () -> auction.placeBid(
+                        unauthorizedBidder,
+                        new BigDecimal("10100000")
+                )
+        );
+
+        // Verify state remains unchanged
+        assertEquals(new BigDecimal("10000000"), auction.getCurrentPrice());
+        assertTrue(auction.getBids().isEmpty());
     }
 }
