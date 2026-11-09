@@ -8,6 +8,11 @@ import org.junit.jupiter.api.Test;
 import com.auction.exception.InvalidBidException;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.auction.model.observer.AuctionListener;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -313,5 +318,96 @@ class AuctionTest {
         assertEquals(1, successfulListenerCalls.get());
         assertEquals(amount, auction.getCurrentPrice());
         assertEquals(1, auction.getBids().size());
+    }
+    
+@Test
+    void placeBid_shouldHandleConcurrentBidsCorrectly() throws Exception {
+        // Arrange
+        auction.startIfDue();
+
+        Bidder bidder1 = new Bidder(
+                "concurrent_alice",
+                "passwordHash",
+                "concurrent_alice@example.com"
+        );
+
+        Bidder bidder2 = new Bidder(
+                "concurrent_bob",
+                "passwordHash",
+                "concurrent_bob@example.com"
+        );
+
+        BigDecimal amount = new BigDecimal("10100000");
+
+        AtomicInteger acceptedCount = new AtomicInteger(0);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch startSignal = new CountDownLatch(1);
+
+        try {
+            // Act: Thread 1
+            Future<?> future1 = executor.submit(() -> {
+                ready.countDown();
+
+                if (!startSignal.await(5, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Timeout waiting to start");
+                }
+
+                try {
+                    auction.placeBid(bidder1, amount);
+                    acceptedCount.incrementAndGet();
+                } catch (InvalidBidException ignored) {
+                    // Bid bị từ chối là kết quả hợp lệ của kịch bản này
+                }
+
+                return null;
+            });
+
+            // Act: Thread 2
+            Future<?> future2 = executor.submit(() -> {
+                ready.countDown();
+
+                if (!startSignal.await(5, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Timeout waiting to start");
+                }
+
+                try {
+                    auction.placeBid(bidder2, amount);
+                    acceptedCount.incrementAndGet();
+                } catch (InvalidBidException ignored) {
+                    // Bid bị từ chối là kết quả hợp lệ của kịch bản này
+                }
+
+                return null;
+            });
+
+            // Chờ cả hai thread sẵn sàng
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+
+            // Cho hai thread bắt đầu gần như đồng thời
+            startSignal.countDown();
+
+            // Chờ hai thread hoàn thành
+            future1.get(5, TimeUnit.SECONDS);
+            future2.get(5, TimeUnit.SECONDS);
+
+        } finally {
+            startSignal.countDown();
+            executor.shutdownNow();
+        }
+
+        // Assert
+        assertEquals(1, acceptedCount.get());
+
+        assertEquals(amount, auction.getCurrentPrice());
+
+        assertEquals(1, auction.getBids().size());
+
+        assertTrue(
+                auction.getLeadingBidderId().equals(bidder1.getId())
+                        || auction.getLeadingBidderId().equals(bidder2.getId())
+        );
     }
 }
