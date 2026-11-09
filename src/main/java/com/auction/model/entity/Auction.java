@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.ReentrantLock;
+import java.time.Duration;
 
 /**
  * Phiên đấu giá cho một Item.
@@ -23,11 +24,13 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class Auction extends Entity {
     private static final System.Logger LOG = System.getLogger(Auction.class.getName());
+    private static final Duration ANTI_SNIPING_WINDOW = Duration.ofSeconds(30);
+    private static final Duration ANTI_SNIPING_EXTENSION = Duration.ofSeconds(30);
 
     private final UUID itemId;
     private final UUID sellerId;
     private final LocalDateTime startTime;
-    private final LocalDateTime endTime;
+    private LocalDateTime endTime;
     private final BigDecimal minIncrement;
 
     private AuctionStatus status = AuctionStatus.OPEN;
@@ -61,11 +64,9 @@ public class Auction extends Entity {
     public void addListener(AuctionListener listener) {
         listeners.add(Objects.requireNonNull(listener, "listener must not be null"));
     }
-
     public void removeListener(AuctionListener listener) {
         listeners.remove(listener);
     }
-
     // Hai hàm notify chỉ gọi khi KHÔNG giữ lock. Một listener lỗi không được làm hỏng
     // bid đã ghi hay chặn các listener còn lại, nên chỉ log rồi đi tiếp.
     private void notifyBidPlaced(BidTransaction bid) {
@@ -77,7 +78,6 @@ public class Auction extends Entity {
             }
         }
     }
-
     private void notifyStatusChanged(AuctionStatus oldStatus, AuctionStatus newStatus) {
         for (AuctionListener listener : listeners) {
             try {
@@ -102,7 +102,6 @@ public class Auction extends Entity {
     }
     public boolean startIfDue() {
         AuctionStatus old;
-
         lock.lock();
         try {
             if (status != AuctionStatus.OPEN
@@ -114,11 +113,9 @@ public class Auction extends Entity {
         } finally {
             lock.unlock();
         }
-
         notifyStatusChanged(old, AuctionStatus.RUNNING);
         return true;
     }
-
     public BidTransaction placeBid(Bidder bidder, BigDecimal amount) {
         BidTransaction bid = recordBid(bidder, amount);
         notifyBidPlaced(bid);
@@ -165,10 +162,24 @@ public class Auction extends Entity {
                     amount,
                     now
             );
-
+            
             bids.add(bid);
             currentPrice = amount;
             leadingBidderId = bidder.getId();
+
+            // Anti-sniping: gia hạn nếu bid nằm trong 30 giây cuối
+            Duration remainingTime = Duration.between(now, endTime);
+
+            if (remainingTime.compareTo(ANTI_SNIPING_WINDOW) <= 0) {
+                endTime = endTime.plus(ANTI_SNIPING_EXTENSION);
+
+                LOG.log(
+                        System.Logger.Level.INFO,
+                        "Phiên {0} được gia hạn đến {1}",
+                        getId(),
+                        endTime
+                );
+            }
 
             markUpdated();
 
@@ -270,7 +281,12 @@ public class Auction extends Entity {
     }
 
     public LocalDateTime getEndTime() {
-        return endTime;
+        lock.lock();
+        try {
+            return endTime;
+        } finally {
+            lock.unlock();
+        }
     }
 
     public BigDecimal getMinIncrement() {
@@ -315,7 +331,6 @@ public class Auction extends Entity {
             lock.unlock();
         }
     }
-
     @Override
     public String toString() {
         return "Auction{id=" + getId() + ", itemId=" + itemId + ", status=" + getStatus()

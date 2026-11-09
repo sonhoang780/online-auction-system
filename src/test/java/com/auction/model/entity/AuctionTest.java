@@ -14,6 +14,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import com.auction.exception.AuctionClosedException;
+import java.time.Duration;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -565,5 +566,86 @@ class AuctionTest {
         // Verify state remains unchanged
         assertEquals(new BigDecimal("10000000"), auction.getCurrentPrice());
         assertTrue(auction.getBids().isEmpty());
+    }
+    @Test
+    void placeBid_shouldExtendEndTime_whenBidIsPlacedWithinLast30Seconds() {
+        // Arrange
+        LocalDateTime now = LocalDateTime.now();
+
+        Item item = new OtherItem(
+                "Anti-sniping Laptop",
+                "Anti-sniping test",
+                UUID.randomUUID(),
+                new BigDecimal("10000000"),
+                List.of(),
+                ItemCategory.OTHER,
+                ItemCondition.NEW,
+                "Test item"
+        );
+
+        Auction testAuction = new Auction(
+                item,
+                now.minusMinutes(1),
+                now.plusSeconds(20),
+                new BigDecimal("100000")
+        );
+
+        testAuction.startIfDue();
+
+        LocalDateTime originalEndTime = testAuction.getEndTime();
+
+        Bidder bidder = new Bidder(
+                "anti_sniping_bidder",
+                "passwordHash",
+                "anti_sniping@example.com"
+        );
+
+        // Act
+        testAuction.placeBid(bidder, new BigDecimal("10100000"));
+
+        // Assert
+        assertEquals(
+                originalEndTime.plusSeconds(30),
+                testAuction.getEndTime()
+        );
+    }
+    @Test
+    void placeBid_shouldNotExtendEndTime_whenMoreThan30SecondsRemain() {
+        // Arrange
+        LocalDateTime now = LocalDateTime.now();
+
+        Item item = new OtherItem(
+                "Normal Laptop",
+                "Normal auction test",
+                UUID.randomUUID(),
+                new BigDecimal("10000000"),
+                List.of(),
+                ItemCategory.OTHER,
+                ItemCondition.NEW,
+                "Test item"
+        );
+
+        Auction testAuction = new Auction(
+                item,
+                now.minusMinutes(1),
+                now.plusMinutes(2),
+                new BigDecimal("100000")
+        );
+
+        testAuction.startIfDue();
+
+        LocalDateTime originalEndTime = testAuction.getEndTime();
+
+        Bidder bidder = new Bidder(
+                "normal_bidder",
+                "passwordHash",
+                "normal@example.com"
+        );
+
+        // Act
+        testAuction.placeBid(bidder, new BigDecimal("10100000"));
+
+        // Assert
+        assertEquals(originalEndTime, testAuction.getEndTime());
     }
 }
