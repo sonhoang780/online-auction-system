@@ -7,14 +7,21 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class AuctionScheduler {
+    private static final System.Logger LOG = System.getLogger(AuctionScheduler.class.getName());
+
     private boolean started = false;
     private boolean stopped = false;
 
     private final AuctionManager auctionManager =
             AuctionManager.getInstance();
 
+    // Daemon: không giữ JVM sống khi server tắt mà quên gọi stop().
     private final ScheduledExecutorService scheduler =
-            Executors.newSingleThreadScheduledExecutor();
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "auction-scheduler");
+                t.setDaemon(true);
+                return t;
+            });
 
     public synchronized void start() {
         if (stopped) {
@@ -43,11 +50,8 @@ public class AuctionScheduler {
                 auction.startIfDue();
                 auction.finishIfExpired();
             } catch (RuntimeException e) {
-                System.err.println(
-                        "Lỗi khi kiểm tra phiên đấu giá "
-                        + auction.getId() + ": " + e.getMessage()
-                );
-                e.printStackTrace();
+                LOG.log(System.Logger.Level.WARNING,
+                        "Lỗi khi kiểm tra phiên đấu giá " + auction.getId(), e);
             }
         }
     }
