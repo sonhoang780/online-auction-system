@@ -1,5 +1,6 @@
 package com.auction.model.entity;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -7,7 +8,9 @@ import java.util.UUID;
  * Lớp gốc cho mọi đối tượng có định danh trong hệ thống (User, Item, Auction, ...).
  * Hai entity bằng nhau khi cùng loại và cùng id.
  */
-public abstract class Entity {
+public abstract class Entity implements Serializable {
+    private static final long serialVersionUID = 1L;
+
     private final UUID id;
     private final LocalDateTime createdAt;
     private LocalDateTime updatedAt;

@@ -5,6 +5,10 @@ import com.auction.exception.InvalidBidException;
 import com.auction.model.enums.AuctionStatus;
 import com.auction.model.observer.AuctionListener;
 
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serial;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -26,6 +30,8 @@ import java.util.List;
  * và listener gọi ngược lại Auction từ thread khác cũng không bị deadlock.
  */
 public class Auction extends Entity {
+    @Serial
+    private static final long serialVersionUID = 1L;
     private static final System.Logger LOG = System.getLogger(Auction.class.getName());
     private static final Duration ANTI_SNIPING_WINDOW = Duration.ofSeconds(30);
     private static final Duration ANTI_SNIPING_EXTENSION = Duration.ofSeconds(30);
@@ -42,9 +48,11 @@ public class Auction extends Entity {
     private final List<BidTransaction> bids = new ArrayList<>();
     private final List<AutoBid> autoBids = new ArrayList<>();
 
+    // ReentrantLock tự Serializable; đọc ra luôn ở trạng thái chưa khoá.
     private final ReentrantLock lock = new ReentrantLock();
     // Đọc nhiều (mỗi bid duyệt 1 lần), ghi ít (client vào/ra phiên) nên không cần lock riêng.
-    private final List<AuctionListener> listeners = new CopyOnWriteArrayList<>();
+    // transient: listener là ClientHandler giữ socket, không lưu được; đọc ra thì tạo list rỗng (readObject).
+    private transient List<AuctionListener> listeners = new CopyOnWriteArrayList<>();
 
     public Auction(Item item, LocalDateTime startTime, LocalDateTime endTime, BigDecimal minIncrement) {
         super();
@@ -471,5 +479,25 @@ public class Auction extends Entity {
         if (autoBid != null) {
             notifyBidPlaced(autoBid);
         }
+    }
+
+    // ============== SERIALIZATION ==============
+
+    // Ghi trong lock: nếu đang ghi file mà thread khác placeBid thì list bids bị sửa giữa chừng
+    // (ConcurrentModificationException hoặc file lưu nửa cũ nửa mới).
+    @Serial
+    private void writeObject(ObjectOutputStream out) throws IOException {
+        lock.lock();
+        try {
+            out.defaultWriteObject();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Serial
+    private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+        in.defaultReadObject();
+        listeners = new CopyOnWriteArrayList<>();
     }
 }
