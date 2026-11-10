@@ -1,6 +1,8 @@
 package com.auction.service;
 
 import com.auction.dao.AuctionDao;
+import com.auction.dao.DataFiles;
+import com.auction.dao.UserDao;
 import com.auction.model.entity.Auction;
 import com.auction.model.entity.BidTransaction;
 import com.auction.model.entity.Bidder;
@@ -26,15 +28,20 @@ import java.util.UUID;
  */
 public class AuctionService {
     private final AuctionDao dao;
+    private final UserDao userDao;
 
-    /** Mặc định lưu trong RAM. Giữ constructor này để server của B (new AuctionService()) không phải sửa. */
+    /**
+     * Mặc định lưu ra file trong data/ (xem DataFiles).
+     * Giữ constructor rỗng để server của B (new AuctionService()) không phải sửa.
+     */
     public AuctionService() {
-        this(AuctionManager.getInstance());
+        this(DataFiles.auctions(), DataFiles.users());
     }
 
-    /** Server truyền FileAuctionDao vào đây để lưu ra file. */
-    public AuctionService(AuctionDao dao) {
+    /** Test truyền DAO riêng vào đây để không đụng tới data/ thật. */
+    public AuctionService(AuctionDao dao, UserDao userDao) {
         this.dao = Objects.requireNonNull(dao, "dao must not be null");
+        this.userDao = Objects.requireNonNull(userDao, "userDao must not be null");
     }
 
     public Auction createAuction(Item item, LocalDateTime start, LocalDateTime end, BigDecimal increment) {

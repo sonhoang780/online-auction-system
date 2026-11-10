@@ -5,3 +5,6 @@ out/
 .vscode/
 *.class
 .DS_Store
+
+### Dữ liệu server (FileAuctionDao, FileUserDao) ###
+data/
