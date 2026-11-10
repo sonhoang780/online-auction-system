@@ -1,7 +1,6 @@
 package com.auction.model.entity;
 
 import java.time.LocalDateTime;
-import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -25,15 +24,6 @@ public abstract class Entity {
      */
     protected void markUpdated() {
         this.updatedAt = LocalDateTime.now();
-    }
-
-    /**
-     * Restore entity từ DB - bắt buộc non-null để tránh data corrupt
-     */
-    protected Entity(UUID id, LocalDateTime createdAt, LocalDateTime updatedAt) {
-        this.id = Objects.requireNonNull(id, "id must not be null");
-        this.createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
-        this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt must not be null");
     }
 
     public UUID getId() {

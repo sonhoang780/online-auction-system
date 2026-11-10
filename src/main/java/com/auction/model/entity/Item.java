@@ -4,7 +4,6 @@ import com.auction.model.enums.ItemCategory;
 import com.auction.model.enums.ItemCondition;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -56,23 +55,6 @@ public abstract class Item extends Entity {
         this.images = new ArrayList<>(Objects.requireNonNull(images, "images must not be null"));
         this.category = Objects.requireNonNull(category, "category must not be null");
         this.condition = Objects.requireNonNull(condition, "condition must not be null");
-    }
-
-    /**
-     * Restore từ DB
-     */
-    protected Item(UUID id, LocalDateTime createdAt, LocalDateTime updatedAt,
-                   String name, String description, UUID sellerId,
-                   BigDecimal startingPrice, List<String> images,
-                   ItemCategory category, ItemCondition condition) {
-        super(id, createdAt, updatedAt);
-        this.name = validateName(name);
-        this.description = description;
-        this.sellerId = Objects.requireNonNull(sellerId);
-        this.startingPrice = validatePrice(startingPrice);
-        this.images = new ArrayList<>(Objects.requireNonNull(images));
-        this.category = Objects.requireNonNull(category);
-        this.condition = Objects.requireNonNull(condition);
     }
 
     // ============== ABSTRACT METHODS (Template Method Pattern) ==============
