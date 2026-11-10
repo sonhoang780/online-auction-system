@@ -312,10 +312,24 @@ public class Auction extends Entity {
         return true;
     }
 
-    public void markPaid() {
+    /**
+     * Người thắng trả tiền: trừ currentPrice khỏi số dư rồi chuyển FINISHED -> PAID.
+     * Kiểm tra, trừ tiền và đổi trạng thái nằm trong cùng một lock: hai request trả tiền đến cùng lúc
+     * thì request sau thấy PAID và bị từ chối, không bị trừ tiền hai lần.
+     * Không đủ tiền thì withdraw ném IllegalStateException trước khi đổi trạng thái, phiên vẫn FINISHED.
+     */
+    public void markPaid(Bidder payer) {
+        Objects.requireNonNull(payer, "payer must not be null");
         AuctionStatus old;
         lock.lock();
         try {
+            if (status != AuctionStatus.FINISHED) {
+                throw new IllegalStateException("Chỉ thanh toán được phiên đã kết thúc, phiên đang " + status);
+            }
+            if (!payer.getId().equals(leadingBidderId)) {
+                throw new IllegalArgumentException("Chỉ người thắng mới được thanh toán");
+            }
+            payer.withdraw(currentPrice);
             old = changeStatus(AuctionStatus.PAID);
         } finally {
             lock.unlock();

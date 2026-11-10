@@ -7,6 +7,7 @@ import com.auction.model.entity.Auction;
 import com.auction.model.entity.BidTransaction;
 import com.auction.model.entity.Bidder;
 import com.auction.model.entity.Item;
+import com.auction.model.entity.User;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -59,6 +60,26 @@ public class AuctionService {
         BidTransaction bid = auction.placeBid(bidder, amount);
         dao.save(auction);
         return bid;
+    }
+
+    /**
+     * Người thắng trả tiền cho phiên đã FINISHED. Server truyền id của user đang đăng nhập.
+     * Lấy Bidder từ UserDao (bản dùng chung, không phải bản client gửi lên) rồi để Auction.markPaid kiểm tra
+     * người thắng, trừ tiền và đổi trạng thái trong lock của phiên.
+     */
+    public void payAuction(UUID auctionId, UUID payerId) {
+        Auction auction = getAuction(auctionId);
+        User user = userDao.findById(payerId)
+                .orElseThrow(() -> new IllegalArgumentException("Không có người dùng " + payerId));
+        if (!(user instanceof Bidder bidder)) {
+            throw new IllegalArgumentException("Chỉ người mua (Bidder) mới thanh toán được");
+        }
+        auction.markPaid(bidder);
+        // ponytail: hai file không ghi cùng lúc được như transaction của DB. Ghi phiên (PAID) trước:
+        // server chết giữa hai lần ghi thì người mua chưa bị trừ tiền trong file, còn phiên đã PAID nên
+        // không trả lại lần nữa được. Ngược lại thì người mua có thể bị trừ tiền hai lần. Muốn chặt hơn thì dùng DB.
+        dao.save(auction);
+        userDao.save(bidder);
     }
 
     public Auction getAuction(UUID auctionId) {
